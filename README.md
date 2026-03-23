@@ -9,6 +9,10 @@
   Multi-agent simulation engine: upload any document (press release, policy draft, financial report), and it generates hundreds of AI agents with unique personalities that simulate public reaction on social media — posts, arguments, opinion shifts — hour by hour.
 </p>
 
+<p align="center">
+  <img src="miroshark.gif" alt="MiroShark Demo" />
+</p>
+
 ---
 
 ## Screenshots
