@@ -313,8 +313,7 @@ EMBEDDING_DIMENSIONS=768
 - **Policy analysis** — test draft regulations against a simulated public
 - **Creative experiments** — feed a novel with a lost ending; agents write a narratively consistent conclusion
 
-## License
-
+Support the project : 0xd7bc6a05a56655fb2052f742b012d1dfd66e1ba3
 AGPL-3.0. See [LICENSE](./LICENSE).
 
 ## Credits
