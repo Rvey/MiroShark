@@ -136,6 +136,26 @@
             </svg>
           </button>
 
+          <button v-if="isComplete" class="strategy-step-btn" :disabled="isCheckingStrategy || isGeneratingStrategy" @click="goToMarketingStrategy">
+            <span>
+              {{
+                isGeneratingStrategy
+                  ? 'Generating Marketing Strategy...'
+                  : existingStrategyId
+                    ? 'Open Marketing Strategy'
+                    : isCheckingStrategy
+                      ? 'Checking Strategy...'
+                      : 'Generate Marketing Strategy'
+              }}
+            </span>
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M4 4h16v16H4z"></path>
+              <path d="M8 8h8"></path>
+              <path d="M8 12h8"></path>
+              <path d="M8 16h5"></path>
+            </svg>
+          </button>
+
           <!-- Export Buttons - shown after completion -->
           <div v-if="isComplete" class="export-buttons">
             <button class="export-btn" @click="downloadExport('json')" :disabled="isExporting">
@@ -413,6 +433,7 @@
 import { ref, computed, watch, onMounted, onUnmounted, nextTick, h, reactive } from 'vue'
 import { useRouter } from 'vue-router'
 import { getAgentLog, getConsoleLog } from '../api/report'
+import { generateMarketingStrategy, getMarketingStrategyByReport } from '../api/marketingStrategy'
 import { exportSimulationData } from '../api/simulation'
 
 const router = useRouter()
@@ -438,6 +459,46 @@ const goToInteraction = () => {
   }
 }
 
+const syncMarketingStrategy = async () => {
+  if (!props.reportId || isCheckingStrategy.value) return
+
+  isCheckingStrategy.value = true
+  try {
+    const res = await getMarketingStrategyByReport(props.reportId)
+    if (res.success && res.data?.strategy_id) {
+      existingStrategyId.value = res.data.strategy_id
+      return
+    }
+    existingStrategyId.value = null
+  } catch {
+    existingStrategyId.value = null
+  } finally {
+    isCheckingStrategy.value = false
+  }
+}
+
+const goToMarketingStrategy = async () => {
+  if (!props.reportId || isGeneratingStrategy.value) return
+
+  if (existingStrategyId.value) {
+    router.push({ name: 'MarketingStrategy', params: { strategyId: existingStrategyId.value } })
+    return
+  }
+
+  isGeneratingStrategy.value = true
+  try {
+    const res = await generateMarketingStrategy({ report_id: props.reportId })
+    if (res.success && res.data?.strategy_id) {
+      existingStrategyId.value = res.data.strategy_id
+      router.push({ name: 'MarketingStrategy', params: { strategyId: res.data.strategy_id } })
+    }
+  } catch (err) {
+    console.warn('Failed to generate marketing strategy:', err)
+  } finally {
+    isGeneratingStrategy.value = false
+  }
+}
+
 // State
 const agentLogs = ref([])
 const consoleLogs = ref([])
@@ -451,6 +512,9 @@ const expandedLogs = ref(new Set())
 const collapsedSections = ref(new Set())
 const isComplete = ref(false)
 const isExporting = ref(false)
+const existingStrategyId = ref(null)
+const isCheckingStrategy = ref(false)
+const isGeneratingStrategy = ref(false)
 
 // Export simulation data as JSON or CSV
 const downloadExport = async (format) => {
@@ -2101,6 +2165,7 @@ const fetchAgentLog = async () => {
             currentSectionIndex.value = null  // Ensure loading state is cleared
             emit('update-status', 'completed')
             stopPolling()
+            syncMarketingStrategy()
             // Scroll logic is handled in nextTick after loop ends
           }
           
@@ -2245,10 +2310,19 @@ watch(() => props.reportId, (newId) => {
     collapsedSections.value = new Set()
     isComplete.value = false
     startTime.value = null
+    existingStrategyId.value = null
+    isCheckingStrategy.value = false
+    isGeneratingStrategy.value = false
     
     startPolling()
   }
 }, { immediate: true })
+
+watch(isComplete, (complete) => {
+  if (complete) {
+    syncMarketingStrategy()
+  }
+})
 </script>
 
 <style scoped>
@@ -3489,6 +3563,36 @@ watch(() => props.reportId, (newId) => {
 
 .next-step-btn:hover svg {
   transform: translateX(4px);
+}
+
+.strategy-step-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: calc(100% - 44px);
+  margin: 10px 22px 0 22px;
+  padding: 12px 16px;
+  font-size: 12px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  color: #0A0A0A;
+  background: #F7F7F7;
+  border: 1px solid rgba(10,10,10,0.14);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+}
+
+.strategy-step-btn:hover:not(:disabled) {
+  border-color: rgba(255,107,26,0.42);
+  background: rgba(255,107,26,0.08);
+}
+
+.strategy-step-btn:disabled {
+  cursor: wait;
+  opacity: 0.7;
 }
 
 /* Export Buttons */

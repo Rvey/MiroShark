@@ -36,20 +36,17 @@ FOR ()-[r:RELATION]-() ON EACH [r.fact, r.name]
 
 
 def get_vector_index_queries() -> list[str]:
-    """Return vector index CREATE queries using the configured dimensions."""
+    """Return vector index CREATE queries using the configured dimensions.
+
+    Neo4j 5.15 does not support vector indexes on relationships, so only the
+    entity vector index is created here. Edge search already falls back to the
+    relationship fulltext index when no vector relationship index is present.
+    """
     dims = Config.EMBEDDING_DIMENSIONS
     return [
         f"""
 CREATE VECTOR INDEX entity_embedding IF NOT EXISTS
 FOR (n:Entity) ON (n.embedding)
-OPTIONS {{indexConfig: {{
-    `vector.dimensions`: {dims},
-    `vector.similarity_function`: 'cosine'
-}}}}
-""",
-        f"""
-CREATE VECTOR INDEX fact_embedding IF NOT EXISTS
-FOR ()-[r:RELATION]-() ON (r.fact_embedding)
 OPTIONS {{indexConfig: {{
     `vector.dimensions`: {dims},
     `vector.similarity_function`: 'cosine'

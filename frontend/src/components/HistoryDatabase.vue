@@ -153,6 +153,25 @@
             <!-- Navigation Buttons -->
             <div class="modal-actions">
               <button
+                v-if="canStopSelected"
+                class="modal-btn btn-stop"
+                :disabled="isStoppingSelected"
+                @click="stopSelectedSimulation"
+              >
+                <span class="btn-step">■</span>
+                <span class="btn-icon">◆</span>
+                <span class="btn-text">{{ isStoppingSelected ? 'Stopping...' : 'Stop Run' }}</span>
+              </button>
+              <button
+                class="modal-btn btn-delete"
+                :disabled="isDeletingSelected"
+                @click="deleteSelectedSimulation"
+              >
+                <span class="btn-step">×</span>
+                <span class="btn-icon">◆</span>
+                <span class="btn-text">{{ isDeletingSelected ? 'Deleting...' : 'Delete' }}</span>
+              </button>
+              <button
                 class="modal-btn btn-project"
                 @click="goToProject"
                 :disabled="!selectedProject.project_id"
@@ -219,7 +238,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, onActivated, watch, nextTick } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import { getSimulationHistory } from '../api/simulation'
+import { getSimulationHistory, stopSimulation, deleteSimulation } from '../api/simulation'
 
 const router = useRouter()
 const route = useRoute()
@@ -231,6 +250,8 @@ const isExpanded = ref(false)
 const hoveringCard = ref(null)
 const historyContainer = ref(null)
 const selectedProject = ref(null)  // Currently selected project (for modal)
+const isStoppingSelected = ref(false)
+const isDeletingSelected = ref(false)
 let observer = null
 let isAnimating = false  // Animation lock to prevent flickering
 let expandDebounceTimer = null  // Debounce timer
@@ -383,6 +404,12 @@ const formatRounds = (simulation) => {
   return `${current}/${total} rounds`
 }
 
+const canStopSelected = computed(() => {
+  const simulation = selectedProject.value
+  if (!simulation) return false
+  return simulation.runner_status === 'running' || simulation.status === 'running'
+})
+
 // Get file type (for styling)
 const getFileType = (filename) => {
   if (!filename) return 'other'
@@ -425,6 +452,59 @@ const navigateToProject = (simulation) => {
 // Close modal
 const closeModal = () => {
   selectedProject.value = null
+  isStoppingSelected.value = false
+  isDeletingSelected.value = false
+}
+
+const stopSelectedSimulation = async () => {
+  if (!selectedProject.value?.simulation_id || isStoppingSelected.value) return
+
+  isStoppingSelected.value = true
+  try {
+    const res = await stopSimulation({ simulation_id: selectedProject.value.simulation_id })
+    if (res.success) {
+      await loadHistory()
+      if (selectedProject.value) {
+        selectedProject.value = {
+          ...selectedProject.value,
+          status: 'paused',
+          runner_status: 'stopped'
+        }
+      }
+      return
+    }
+
+    alert(`Failed to stop simulation: ${res.error || 'Unknown error'}`)
+  } catch (error) {
+    alert(`Failed to stop simulation: ${error.message}`)
+  } finally {
+    isStoppingSelected.value = false
+  }
+}
+
+const deleteSelectedSimulation = async () => {
+  if (!selectedProject.value?.simulation_id || isDeletingSelected.value) return
+  if (!window.confirm(`Delete simulation ${selectedProject.value.simulation_id}?`)) return
+
+  isDeletingSelected.value = true
+  try {
+    const simulationId = selectedProject.value.simulation_id
+    const res = await deleteSimulation(simulationId)
+    if (res.success) {
+      await loadHistory()
+      if (route.params.simulationId === simulationId) {
+        router.push('/')
+      }
+      closeModal()
+      return
+    }
+
+    alert(`Failed to delete simulation: ${res.error || 'Unknown error'}`)
+  } catch (error) {
+    alert(`Failed to delete simulation: ${error.message}`)
+  } finally {
+    isDeletingSelected.value = false
+  }
 }
 
 // Navigate to graph build page (Project)

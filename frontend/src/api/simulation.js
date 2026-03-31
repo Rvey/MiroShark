@@ -93,6 +93,14 @@ export const stopSimulation = (data) => {
 }
 
 /**
+ * Delete simulation and related artifacts
+ * @param {string} simulationId
+ */
+export const deleteSimulation = (simulationId) => {
+  return service.delete(`/api/simulation/${simulationId}`)
+}
+
+/**
  * Resume simulation from last completed round
  * @param {Object} data - { simulation_id, platform?, enable_graph_memory_update? }
  */

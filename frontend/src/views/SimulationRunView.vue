@@ -26,6 +26,21 @@
           <span class="step-name">Simulation</span>
         </div>
         <div class="step-divider"></div>
+        <button
+          v-if="isSimulating"
+          class="header-stop-btn"
+          :disabled="isStoppingSimulation"
+          @click="handleStopFromHeader"
+        >
+          {{ isStoppingSimulation ? 'Stopping...' : 'Stop' }}
+        </button>
+        <button
+          class="header-delete-btn"
+          :disabled="isDeletingSimulation"
+          @click="handleDeleteFromHeader"
+        >
+          {{ isDeletingSimulation ? 'Deleting...' : 'Delete' }}
+        </button>
         <span class="status-indicator" :class="statusClass">
           <span class="dot"></span>
           {{ statusText }}
@@ -57,6 +72,7 @@
       <!-- Right Panel: Step3 Start Simulation -->
       <div class="panel-wrapper right" :style="rightPanelStyle">
         <Step3Simulation
+          :key="step3RefreshKey"
           :simulationId="currentSimulationId"
           :maxRounds="maxRounds"
           :minutesPerRound="minutesPerRound"
@@ -80,7 +96,7 @@ import GraphPanel from '../components/GraphPanel.vue'
 import NetworkPanel from '../components/NetworkPanel.vue'
 import Step3Simulation from '../components/Step3Simulation.vue'
 import { getProject, getGraphData } from '../api/graph'
-import { getSimulation, getSimulationConfig, stopSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
+import { getSimulation, getSimulationConfig, stopSimulation, deleteSimulation, closeSimulationEnv, getEnvStatus } from '../api/simulation'
 
 const route = useRoute()
 const router = useRouter()
@@ -103,6 +119,9 @@ const graphData = ref(null)
 const graphLoading = ref(false)
 const systemLogs = ref([])
 const currentStatus = ref('processing') // processing | completed | error
+const isStoppingSimulation = ref(false)
+const isDeletingSimulation = ref(false)
+const step3RefreshKey = ref(0)
 
 // --- Computed Layout Styles ---
 const leftPanelStyle = computed(() => {
@@ -198,6 +217,55 @@ const handleGoBack = async () => {
 
   // Return to Step 2 (Agent Setup)
   router.push({ name: 'Simulation', params: { simulationId: currentSimulationId.value } })
+}
+
+const handleStopFromHeader = async () => {
+  if (!currentSimulationId.value || isStoppingSimulation.value) return
+
+  isStoppingSimulation.value = true
+  addLog('Stopping simulation from view header...')
+
+  try {
+    const res = await stopSimulation({ simulation_id: currentSimulationId.value })
+
+    if (res.success) {
+      addLog('Simulation stopped')
+      currentStatus.value = 'completed'
+      step3RefreshKey.value += 1
+    } else {
+      addLog(`Stop failed: ${res.error || 'Unknown error'}`)
+    }
+  } catch (err) {
+    addLog(`Stop error: ${err.message}`)
+  } finally {
+    isStoppingSimulation.value = false
+  }
+}
+
+const handleDeleteFromHeader = async () => {
+  if (!currentSimulationId.value || isDeletingSimulation.value) return
+  if (!window.confirm('Delete this simulation and its related report data?')) return
+
+  isDeletingSimulation.value = true
+  addLog('Deleting simulation...')
+
+  try {
+    const res = await deleteSimulation(currentSimulationId.value)
+    if (res.success) {
+      addLog('Simulation deleted')
+      const target = projectData.value?.project_id
+        ? { name: 'Process', params: { projectId: projectData.value.project_id } }
+        : { path: '/' }
+      router.push(target)
+      return
+    }
+
+    addLog(`Delete failed: ${res.error || 'Unknown error'}`)
+  } catch (err) {
+    addLog(`Delete error: ${err.message}`)
+  } finally {
+    isDeletingSimulation.value = false
+  }
 }
 
 const handleNextStep = () => {
@@ -436,6 +504,54 @@ onUnmounted(() => {
 .status-indicator.processing .dot { background: #FF6B1A; animation: pulse 1s infinite; }
 .status-indicator.completed .dot { background: #43C165; }
 .status-indicator.error .dot { background: #FF4444; }
+
+.header-stop-btn {
+  border: 1px solid rgba(255, 107, 26, 0.5);
+  background: rgba(255, 107, 26, 0.12);
+  color: #FAFAFA;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 7px 10px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.header-stop-btn:hover:not(:disabled) {
+  background: rgba(255, 107, 26, 0.2);
+  border-color: #FF6B1A;
+}
+
+.header-stop-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
+
+.header-delete-btn {
+  border: 1px solid rgba(255, 68, 68, 0.45);
+  background: rgba(255, 68, 68, 0.14);
+  color: #FAFAFA;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 7px 10px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.2s ease, border-color 0.2s ease, opacity 0.2s ease;
+}
+
+.header-delete-btn:hover:not(:disabled) {
+  background: rgba(255, 68, 68, 0.22);
+  border-color: rgba(255, 68, 68, 0.7);
+}
+
+.header-delete-btn:disabled {
+  opacity: 0.6;
+  cursor: wait;
+}
 
 @keyframes pulse { 50% { opacity: 0.5; } }
 

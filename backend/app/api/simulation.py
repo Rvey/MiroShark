@@ -20,6 +20,7 @@ from ..services.simulation_manager import SimulationManager, SimulationStatus
 from ..services.simulation_runner import SimulationRunner, RunnerStatus
 from ..utils.logger import get_logger
 from ..models.project import ProjectManager
+from ..services.report_agent import ReportManager
 
 logger = get_logger('miroshark.api.simulation')
 
@@ -1756,6 +1757,54 @@ def stop_simulation():
             "success": False,
             "error": str(e),
             "traceback": traceback.format_exc()
+        }), 500
+
+
+@simulation_bp.route('/<simulation_id>', methods=['DELETE'])
+def delete_simulation(simulation_id: str):
+    """Delete a simulation and its related runtime/report artifacts."""
+    try:
+        manager = SimulationManager()
+        state = manager.get_simulation(simulation_id)
+
+        if not state:
+            return jsonify({
+                "success": False,
+                "error": f"Simulation not found: {simulation_id}"
+            }), 404
+
+        run_state = SimulationRunner.get_run_state(simulation_id)
+        if run_state and run_state.runner_status in [RunnerStatus.RUNNING, RunnerStatus.PAUSED]:
+            SimulationRunner.stop_simulation(simulation_id)
+
+        SimulationRunner.purge_simulation(simulation_id)
+
+        deleted_report_id = None
+        linked_report = ReportManager.get_report_by_simulation(simulation_id)
+        if linked_report:
+            ReportManager.delete_report(linked_report.report_id)
+            deleted_report_id = linked_report.report_id
+
+        deleted = manager.delete_simulation(simulation_id)
+        if not deleted:
+            return jsonify({
+                "success": False,
+                "error": f"Simulation data not found: {simulation_id}"
+            }), 404
+
+        return jsonify({
+            "success": True,
+            "data": {
+                "simulation_id": simulation_id,
+                "deleted_report_id": deleted_report_id,
+            }
+        })
+
+    except Exception as e:
+        logger.error(f"Failed to delete simulation: {str(e)}")
+        return jsonify({
+            "success": False,
+            "error": str(e)
         }), 500
 
 

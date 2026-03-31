@@ -1261,6 +1261,50 @@ class SimulationRunner:
             "cleaned_files": cleaned_files,
             "errors": errors if errors else None
         }
+
+    @classmethod
+    def purge_simulation(cls, simulation_id: str):
+        """Remove in-memory state and stop any live process for a simulation."""
+        state = cls.get_run_state(simulation_id)
+        if state and state.runner_status in [
+            RunnerStatus.RUNNING,
+            RunnerStatus.PAUSED,
+            RunnerStatus.STARTING,
+            RunnerStatus.STOPPING,
+        ]:
+            process = cls._processes.get(simulation_id)
+            if process and process.poll() is None:
+                try:
+                    cls._terminate_process(process, simulation_id, timeout=5)
+                except Exception as e:
+                    logger.warning(f"Failed to terminate simulation during purge: {simulation_id}, error={e}")
+
+        if cls._graph_memory_enabled.get(simulation_id, False):
+            try:
+                GraphMemoryManager.stop_updater(simulation_id)
+            except Exception as e:
+                logger.warning(f"Failed to stop graph updater during purge: {simulation_id}, error={e}")
+
+        stdout_handle = cls._stdout_files.pop(simulation_id, None)
+        if stdout_handle:
+            try:
+                stdout_handle.close()
+            except Exception:
+                pass
+
+        stderr_handle = cls._stderr_files.pop(simulation_id, None)
+        if stderr_handle:
+            try:
+                stderr_handle.close()
+            except Exception:
+                pass
+
+        cls._run_states.pop(simulation_id, None)
+        cls._processes.pop(simulation_id, None)
+        cls._action_queues.pop(simulation_id, None)
+        cls._monitor_threads.pop(simulation_id, None)
+        cls._graph_memory_enabled.pop(simulation_id, None)
+        logger.info(f"Purged simulation runtime state: {simulation_id}")
     
     # Flag to prevent duplicate cleanup
     _cleanup_done = False

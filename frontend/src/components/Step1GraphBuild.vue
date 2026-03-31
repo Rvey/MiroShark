@@ -168,6 +168,21 @@
             >
               <span class="sim-id mono">{{ sim.simulation_id }}</span>
               <span class="sim-status" :class="sim.status">{{ sim.status }}</span>
+              <button
+                v-if="canStopSimulation(sim)"
+                class="sim-stop-btn"
+                :disabled="stoppingSimulationId === sim.simulation_id || deletingSimulationId === sim.simulation_id"
+                @click.stop="handleStopSimulation(sim)"
+              >
+                {{ stoppingSimulationId === sim.simulation_id ? 'Stopping...' : 'Stop' }}
+              </button>
+              <button
+                class="sim-delete-btn"
+                :disabled="deletingSimulationId === sim.simulation_id || stoppingSimulationId === sim.simulation_id"
+                @click.stop="handleDeleteSimulation(sim)"
+              >
+                {{ deletingSimulationId === sim.simulation_id ? 'Deleting...' : 'Delete' }}
+              </button>
               <span class="sim-arrow">→</span>
             </div>
           </div>
@@ -203,7 +218,7 @@
 <script setup>
 import { computed, ref, watch, nextTick, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { createSimulation, listSimulations } from '../api/simulation'
+import { createSimulation, listSimulations, stopSimulation, deleteSimulation } from '../api/simulation'
 
 const router = useRouter()
 
@@ -223,6 +238,8 @@ const logContent = ref(null)
 const dashboardCollapsed = ref(true)
 const creatingSimulation = ref(false)
 const existingSimulations = ref([])
+const stoppingSimulationId = ref(null)
+const deletingSimulationId = ref(null)
 
 // Check for existing simulations for this project
 const loadExistingSimulations = async () => {
@@ -242,6 +259,50 @@ watch(() => props.projectData?.project_id, loadExistingSimulations)
 
 const resumeSimulation = (simId) => {
   router.push({ name: 'Simulation', params: { simulationId: simId } })
+}
+
+const canStopSimulation = (simulation) => simulation?.status === 'running'
+
+const handleStopSimulation = async (simulation) => {
+  if (!simulation?.simulation_id || stoppingSimulationId.value) return
+
+  stoppingSimulationId.value = simulation.simulation_id
+
+  try {
+    const res = await stopSimulation({ simulation_id: simulation.simulation_id })
+
+    if (res.success) {
+      await loadExistingSimulations()
+      return
+    }
+
+    alert(`Failed to stop simulation: ${res.error || 'Unknown error'}`)
+  } catch (err) {
+    alert(`Failed to stop simulation: ${err.message}`)
+  } finally {
+    stoppingSimulationId.value = null
+  }
+}
+
+const handleDeleteSimulation = async (simulation) => {
+  if (!simulation?.simulation_id || deletingSimulationId.value) return
+  if (!window.confirm(`Delete simulation ${simulation.simulation_id}?`)) return
+
+  deletingSimulationId.value = simulation.simulation_id
+
+  try {
+    const res = await deleteSimulation(simulation.simulation_id)
+    if (res.success) {
+      await loadExistingSimulations()
+      return
+    }
+
+    alert(`Failed to delete simulation: ${res.error || 'Unknown error'}`)
+  } catch (err) {
+    alert(`Failed to delete simulation: ${err.message}`)
+  } finally {
+    deletingSimulationId.value = null
+  }
 }
 
 // Enter agent setup - create simulation and navigate
@@ -736,6 +797,52 @@ watch(() => props.systemLogs.length, () => {
 .sim-arrow {
   color: rgba(10,10,10,0.4);
   font-size: 12px;
+}
+
+.sim-stop-btn {
+  border: 1px solid rgba(255, 68, 68, 0.25);
+  background: rgba(255, 68, 68, 0.08);
+  color: #9F1D1D;
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 4px 7px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.sim-stop-btn:hover:not(:disabled) {
+  background: rgba(255, 68, 68, 0.14);
+  border-color: rgba(255, 68, 68, 0.45);
+}
+
+.sim-stop-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.sim-delete-btn {
+  border: 1px solid rgba(10,10,10,0.12);
+  background: #F5F5F5;
+  color: rgba(10,10,10,0.72);
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  padding: 4px 7px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.sim-delete-btn:hover:not(:disabled) {
+  border-color: rgba(10,10,10,0.28);
+  background: rgba(10,10,10,0.06);
+}
+
+.sim-delete-btn:disabled {
+  cursor: wait;
+  opacity: 0.65;
 }
 
 .progress-section {
